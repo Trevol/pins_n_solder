@@ -4,8 +4,11 @@ import utils.keyboard_keys as kbd
 
 
 def noisyImage(shape, colorMean, colorStd):
+    # channels = [np.random.normal(m, s, shape[:2]).round(0).astype(np.uint8) for m, s in zip(colorMean, colorStd)]
+    # return np.dstack(channels)
     normal = np.random.normal(colorMean, colorStd, shape)
-    return np.round(normal, 0, out=normal).astype(np.uint8)
+    normal = np.round(normal, 0, out=normal)
+    return np.abs(normal, out=normal).astype(np.uint8)
 
 
 def noisyBackground(shape):
@@ -14,16 +17,35 @@ def noisyBackground(shape):
     return noisyImage(shape, mean, std)
 
 
-def drawNoisyCircle(img, center, r, colorMean, colorStd):
+def drawNoisyCircle_1(img, center, r, colorMean, colorStd):
     src = np.zeros_like(img)
     cv2.circle(src, center, r, colorMean, -1)
-    _, mask = cv2.threshold(src[..., 0], 1, 255, cv2.THRESH_BINARY)
+    mask = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
     dst = img.astype(np.float32)
     dst = cv2.accumulateWeighted(src, dst, 1, mask=mask)
     return dst.astype(np.uint8)
-    # cv2.circle(img, center, r, 0, -1)
-    # return img | mask
 
+
+def drawNoisyCircle_2(img, center, r, colorMean, colorStd):
+    # img =
+    src = cv2.circle(np.zeros_like(img), center, r, colorMean, -1)
+    mask = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
+    mask = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY, dst=mask)[1]
+    inverseMask = cv2.bitwise_not(mask)
+
+    # img = cv2.bitwise_and(img, inverseMask, dst=img)
+    img[mask.astype(np.bool)] = 0
+    return cv2.add(src, img, dst=img, mask=mask, dtype=cv2.CV_8U)
+
+
+def drawNoisyCircle(img, center, r, colorMean, colorStd):
+    mask = cv2.circle(np.zeros_like(img), center, r, (255, 255, 255), -1)
+    inverseMask = cv2.bitwise_not(mask)
+    img = cv2.bitwise_and(img, inverseMask, dst=img)  # img with black hole
+    nsImage = noisyImage(mask.shape, colorMean, colorStd)
+    colorObj = np.bitwise_and(mask, nsImage, out=nsImage, dtype=np.uint8, casting='unsafe')
+    img = cv2.bitwise_or(img, colorObj, dst=img)
+    return img
 
 
 def syntheticClip(framesCount=None):
@@ -57,7 +79,8 @@ def main():
 
 def main():
     img = noisyBackground([200, 400, 3])
-    img = drawNoisyCircle(img, (100, 100), 50, (0, 180, 0), [2, 2, 2])
+    img = drawNoisyCircle(img, (100, 100), 50, [0, 150, 0], [3, 4, 1])
+
     cv2.imshow('', img)
     kbd.wait()
 
