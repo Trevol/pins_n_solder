@@ -1,14 +1,15 @@
 import numpy as np
 import cv2
 import utils.keyboard_keys as kbd
+from utils import keyboard_keys
 
 
 def noisyImage(shape, colorMean, colorStd):
-    # channels = [np.random.normal(m, s, shape[:2]).round(0).astype(np.uint8) for m, s in zip(colorMean, colorStd)]
-    # return np.dstack(channels)
     normal = np.random.normal(colorMean, colorStd, shape)
     normal = np.round(normal, 0, out=normal)
-    return np.abs(normal, out=normal).astype(np.uint8)
+    # normal = np.abs(normal, out=normal).astype(np.uint8)
+    normal = np.clip(normal, 0, 255, out=normal)
+    return normal.astype(np.uint8)
 
 
 def noisyBackground(shape):
@@ -17,72 +18,58 @@ def noisyBackground(shape):
     return noisyImage(shape, mean, std)
 
 
-def drawNoisyCircle_1(img, center, r, colorMean, colorStd):
-    src = np.zeros_like(img)
-    cv2.circle(src, center, r, colorMean, -1)
-    mask = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
-    dst = img.astype(np.float32)
-    dst = cv2.accumulateWeighted(src, dst, 1, mask=mask)
-    return dst.astype(np.uint8)
-
-
-def drawNoisyCircle_2(img, center, r, colorMean, colorStd):
-    # img =
-    src = cv2.circle(np.zeros_like(img), center, r, colorMean, -1)
-    mask = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
-    mask = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY, dst=mask)[1]
-    inverseMask = cv2.bitwise_not(mask)
-
-    # img = cv2.bitwise_and(img, inverseMask, dst=img)
-    img[mask.astype(np.bool)] = 0
-    return cv2.add(src, img, dst=img, mask=mask, dtype=cv2.CV_8U)
-
-
 def drawNoisyCircle(img, center, r, colorMean, colorStd):
     mask = cv2.circle(np.zeros_like(img), center, r, (255, 255, 255), -1)
     inverseMask = cv2.bitwise_not(mask)
     img = cv2.bitwise_and(img, inverseMask, dst=img)  # img with black hole
-    nsImage = noisyImage(mask.shape, colorMean, colorStd)
-    colorObj = np.bitwise_and(mask, nsImage, out=nsImage, dtype=np.uint8, casting='unsafe')
+    colorObj = noisyImage(mask.shape, colorMean, colorStd)
+    colorObj = np.bitwise_and(mask, colorObj, out=colorObj, dtype=np.uint8, casting='unsafe')
     img = cv2.bitwise_or(img, colorObj, dst=img)
     return img
 
 
-def syntheticClip(framesCount=None):
-    r = 25
-    objColor = (0, 200, 0)
-    bg = noisyBackground((200, 400, 3))
+def throttleKeyEvents(delay=1, iterations=1):
+    for _ in range(iterations):
+        cv2.waitKey(delay)
 
-    center0 = np.int16([-r - 2, 100])
-    step = np.int16([5, 0])
 
-    yield 0, bg.copy()
-    for i in range(framesCount or 1000):
-        center = tuple(center0 + step * i)
-        yield i + 1, cv2.circle(bg.copy(), center, r, objColor, -1)
+def controlledFrames(bg, center, step):
+    controls = dict(zip(
+        [ord('w'), ord('s'), ord('a'), ord('d'),
+         keyboard_keys.UpArrow, keyboard_keys.DownArrow, keyboard_keys.LeftArrow, keyboard_keys.RightArrow],
+        np.int8([[0, -1], [0, 1], [-1, 0], [1, 0]] * 2) * step  # unitVector * step(magnitude of vector)
+    ))
+    r = 50
+    center = np.asarray(center)
+    aMin, aMax = [-r - 1, -r - 1], [bg.shape[1] + r + 1, bg.shape[0] + r + 1]
+    np.clip(center, aMin, aMax, center)  # clip boundaries
+    index = 0
+    # yield bg.copy()
+    while True:
+        frame = drawNoisyCircle(bg.copy(), tuple(center), r, [0, 150, 0], [3, 4, 1])
+        cv2.imshow('frame', frame)
+        throttleKeyEvents()  # small delay for window refresh
+        index += 1
+        cv2.setWindowTitle('frame', f'frame {index}')
+        key = keyboard_keys.wait(None, 27, *controls)
+        if key == 27:
+            yield None
+            break
+        center = np.add(center, controls[key], out=center)  # center = center + stepVector
+        np.clip(center, aMin, aMax, center)  # clip boundaries
+        yield frame
 
 
 def main():
-    cv2.namedWindow('clip')
-    framesIter = syntheticClip()
-    i, prevFrame = next(framesIter)
-    for i, frame in framesIter:
+    noisyBackground([200, 400, 3])
+    frames = controlledFrames(noisyBackground([200, 400, 3]), [11, 5], 5)
+    prevFrame = next(frames)
+    for frame in frames:
+        if frame is None:
+            break
         diff = cv2.absdiff(prevFrame, frame)
-
         cv2.imshow('diff', diff)
-        cv2.imshow('clip', frame)
-        cv2.setWindowTitle('clip', f'clip {i}')
-
-        if cv2.waitKey() == 27: break
         prevFrame = frame
-
-
-def main():
-    img = noisyBackground([200, 400, 3])
-    img = drawNoisyCircle(img, (100, 100), 50, [0, 150, 0], [3, 4, 1])
-
-    cv2.imshow('', img)
-    kbd.wait()
 
 
 if __name__ == '__main__':
