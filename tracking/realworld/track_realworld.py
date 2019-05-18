@@ -4,7 +4,7 @@ from utils.keyboard_keys import wait
 from utils.video_capture import VideoCapture, putFramePos
 from utils.video_controller import VideoController
 from utils.cv_named_window import CvNamedWindow as Wnd, imshow
-from tracking.realworld.video_sources import video_6, video_6_work_area_markers
+from video_sources import video_6, video_6_work_area_markers
 from utils.image_resizer import ImageResizer
 from utils.workarea_view import WorkAreaView, NonSlicingWorkAreaView
 

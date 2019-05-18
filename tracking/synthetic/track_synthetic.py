@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from tracking.synthetic.scene import noisyBackground, controlledFrames
+from scene import noisyBackground, controlledFrames
 from utils.cv_named_window import imshow, CvNamedWindow as Wnd
 
 
