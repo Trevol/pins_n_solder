@@ -28,6 +28,9 @@ class WorkAreaView:
     def resolution(self):
         return self.rect_dims
 
+    def size(self):
+        return self.resolution()[::-1]
+
     @staticmethod
     def move_to_origin(poly):
         min_x = poly[..., 0].min()
@@ -49,6 +52,41 @@ class WorkAreaView:
             work_area_rect = self.__denoise(work_area_rect)
         work_area_rect = self.mask_non_area(work_area_rect)
         return work_area_rect
+
+    @staticmethod
+    def __denoise(frame, dst=None):
+        return cv2.GaussianBlur(frame, (3, 3), 0, dst=dst)
+
+    def skip_non_area(self, original_frames, denoise=True):
+        for frame in original_frames:
+            view = self.extract_view(frame, denoise)
+            yield view, frame
+
+
+class NonSlicingWorkAreaView:
+    def __init__(self, marker_points, imageSize):
+        self.marker_points = marker_points
+        self.mask, self.mask_3ch = self.build_masks(self.marker_points, imageSize)
+
+    @staticmethod
+    def build_masks(poly, imageSize):
+        h, w = imageSize
+        mask = np.zeros((h, w), np.uint8)
+        cv2.fillConvexPoly(mask, poly, 255)
+        mask_3ch = np.dstack((mask, mask, mask))
+        return mask, mask_3ch
+
+    def mask_non_area(self, frame):
+        mask = self.mask if len(frame.shape) == 2 else self.mask_3ch
+        # f = cv2.bitwise_and(frame, mask, dst=frame)
+        f = np.bitwise_and(frame, mask)
+
+        return f
+
+    def extract_view(self, frame, denoise=True):
+        if denoise:
+            frame = self.__denoise(frame)
+        return self.mask_non_area(frame)
 
     @staticmethod
     def __denoise(frame, dst=None):
